@@ -141,8 +141,12 @@ module.exports = async function (context, req) {
   const blockBlob = container.getBlockBlobClient(blobPath);
 
   await blockBlob.uploadData(fileBuf, {
-    blobHTTPHeaders: { blobContentType: fileType || "image/png" },
-  });
+  blobHTTPHeaders: {
+    blobContentType: fileType || "image/png",
+    blobCacheControl: "no-store, no-cache, must-revalidate, max-age=0",
+  },
+});
+
 
   context.res = json(200, { ok: true, matchId, blobPath });
 };
