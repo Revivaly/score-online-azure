@@ -54,6 +54,30 @@ const safe = (s, max) =>
     .replace(/[^a-zA-Z0-9_-]+/g, "_")
     .slice(0, max);
 
+const parseJsonBody = (req) => {
+  // Azure SWA can provide req.body as object, string, or (rarely) Buffer.
+  let b = req.body;
+
+  if (Buffer.isBuffer(b)) {
+    try {
+      b = b.toString("utf8");
+    } catch {
+      return {};
+    }
+  }
+
+  if (typeof b === "string") {
+    try {
+      return JSON.parse(b);
+    } catch {
+      return {};
+    }
+  }
+
+  if (b && typeof b === "object") return b;
+  return {};
+};
+
 module.exports = async function (context, req) {
   if (req.method === "OPTIONS") {
     context.res = { status: 200, headers: corsHeaders, body: "" };
@@ -70,27 +94,37 @@ module.exports = async function (context, req) {
     return;
   }
 
-  const token =
+  // Token: prefer header (if used), else accept in body to avoid CORS preflight.
+  const tokenFromHeader =
     (req.headers && (req.headers["x-score-token"] || req.headers["X-Score-Token"])) || "";
-  if (!token) {
-    context.res = json(401, { ok: false, error: "missing x-score-token" });
+
+  const ct = String(req.headers["content-type"] || req.headers["Content-Type"] || "").toLowerCase();
+  if (!(ct.includes("application/json") || ct.includes("text/plain"))) {
+    context.res = json(415, {
+      ok: false,
+      error: "expected application/json or text/plain JSON body",
+    });
     return;
   }
 
-  const vr = verifyJwtHs256(String(token), tokenSecret);
+  const bodyObj = parseJsonBody(req);
+
+  const tokenFromBody = bodyObj && bodyObj.token ? String(bodyObj.token) : "";
+  const token = String(tokenFromHeader || tokenFromBody || "").trim();
+
+  if (!token) {
+    context.res = json(401, { ok: false, error: "missing token" });
+    return;
+  }
+
+  const vr = verifyJwtHs256(token, tokenSecret);
   if (!vr.ok) {
     context.res = json(401, { ok: false, error: vr.error });
     return;
   }
 
-  const ct = String(req.headers["content-type"] || req.headers["Content-Type"] || "");
-  if (!ct.toLowerCase().includes("application/json")) {
-    context.res = json(415, { ok: false, error: "expected application/json with base64 image" });
-    return;
-  }
-
-  const matchId = safe(req.body?.matchId, 40);
-  let imageBase64 = String(req.body?.imageBase64 || "");
+  const matchId = safe(bodyObj?.matchId, 40);
+  let imageBase64 = String(bodyObj?.imageBase64 || "");
 
   if (!matchId) {
     context.res = json(400, { ok: false, error: "missing matchId" });
