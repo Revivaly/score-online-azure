@@ -52,7 +52,7 @@ const safe = (s, max) => String(s || "").replace(/[^a-zA-Z0-9_-]+/g, "_").slice(
 
 module.exports = async function (context, req) {
   if (req.method === "OPTIONS") {
-    context.res = { status: 204, headers: corsHeaders };
+    context.res = { status: 200, headers: corsHeaders, body: "" };
     return;
   }
 
