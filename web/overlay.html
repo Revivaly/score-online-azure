@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SCORE ONLINE Overlay</title>
+    <style>
+      html, body { height: 100%; margin: 0; background: transparent; }
+      img { width: 100%; height: 100%; object-fit: contain; display:block; }
+    </style>
+  </head>
+  <body>
+    <img id="img" alt="SCORE ONLINE" />
+    <script>
+      const u = new URL(location.href);
+      const matchId = u.searchParams.get("matchId") || "";
+      const refreshMs = Math.max(250, Math.min(10000, Number(u.searchParams.get("refreshMs") || "1000")));
+      const img = document.getElementById("img");
+
+      if (!matchId) {
+        document.body.innerHTML = "<pre style='margin:12px'>Missing matchId</pre>";
+      } else {
+        const base = `/api/scoreboard-image?matchId=${encodeURIComponent(matchId)}`;
+        const tick = () => { img.src = base + "&t=" + Date.now(); };
+        tick();
+        setInterval(tick, refreshMs);
+      }
+    </script>
+  </body>
+</html>
