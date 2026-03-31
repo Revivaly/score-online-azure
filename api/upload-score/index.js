@@ -1,6 +1,4 @@
 const crypto = require("crypto");
-const { Readable } = require("stream");
-const Busboy = require("busboy");
 const { BlobServiceClient } = require("@azure/storage-blob");
 
 const corsHeaders = {
@@ -61,17 +59,12 @@ module.exports = async function (context, req) {
   const tokenSecret = process.env.TOKEN_SECRET || "";
   const conn = process.env.AZURE_STORAGE_CONNECTION_STRING || "";
   if (!tokenSecret || !conn) {
-    context.res = json(500, {
-      ok: false,
-      error: "missing env TOKEN_SECRET/AZURE_STORAGE_CONNECTION_STRING",
-    });
+    context.res = json(500, { ok: false, error: "missing env TOKEN_SECRET/AZURE_STORAGE_CONNECTION_STRING" });
     return;
   }
 
-  // NOTE: Do NOT use Authorization header (SWA may inject its own).
   const token =
     (req.headers && (req.headers["x-score-token"] || req.headers["X-Score-Token"])) || "";
-
   if (!token) {
     context.res = json(401, { ok: false, error: "missing x-score-token" });
     return;
@@ -83,57 +76,33 @@ module.exports = async function (context, req) {
     return;
   }
 
-  const contentType = req.headers["content-type"] || req.headers["Content-Type"] || "";
-  if (!String(contentType).includes("multipart/form-data")) {
-    context.res = json(400, { ok: false, error: "expected multipart/form-data" });
+  const ct = String(req.headers["content-type"] || req.headers["Content-Type"] || "");
+  if (!ct.toLowerCase().includes("application/json")) {
+    context.res = json(415, { ok: false, error: "expected application/json with base64 image" });
     return;
   }
 
-  const raw = req.rawBody || req.body;
-  const buf = Buffer.isBuffer(raw) ? raw : Buffer.from(raw || "");
-  let raw = req.body;
-  if (!Buffer.isBuffer(raw) && req.rawBody) raw = req.rawBody;
-  const buf = Buffer.isBuffer(raw) ? raw : Buffer.from(String(raw || ""), "binary");
-
-  const stream = Readable.from(buf);
-
-  let matchId = "";
-  let fileBuf = null;
-  let fileType = "image/png";
-
-  const bb = Busboy({ headers: { "content-type": contentType } });
-
-  const filePromise = new Promise((resolve, reject) => {
-    bb.on("field", (name, val) => {
-      if (name === "matchId") matchId = safe(val, 40);
-    });
-
-    bb.on("file", (name, file, info) => {
-      if (name !== "image") {
-        file.resume();
-        return;
-      }
-      fileType = info?.mimeType || "image/png";
-      const chunks = [];
-      file.on("data", (d) => chunks.push(d));
-      file.on("end", () => {
-        fileBuf = Buffer.concat(chunks);
-      });
-    });
-
-    bb.on("error", reject);
-    bb.on("finish", resolve);
-  });
-
-  stream.pipe(bb);
-  await filePromise;
+  const matchId = safe(req.body?.matchId, 40);
+  let imageBase64 = String(req.body?.imageBase64 || "");
 
   if (!matchId) {
     context.res = json(400, { ok: false, error: "missing matchId" });
     return;
   }
-  if (!fileBuf || !fileBuf.length) {
-    context.res = json(400, { ok: false, error: "missing image" });
+  if (!imageBase64) {
+    context.res = json(400, { ok: false, error: "missing imageBase64" });
+    return;
+  }
+
+  // allow data URL
+  const comma = imageBase64.indexOf(",");
+  if (comma >= 0) imageBase64 = imageBase64.slice(comma + 1);
+
+  let bytes;
+  try {
+    bytes = Buffer.from(imageBase64, "base64");
+  } catch {
+    context.res = json(400, { ok: false, error: "bad base64" });
     return;
   }
 
@@ -144,13 +113,12 @@ module.exports = async function (context, req) {
   const container = blobService.getContainerClient(containerName);
   const blockBlob = container.getBlockBlobClient(blobPath);
 
-  await blockBlob.uploadData(fileBuf, {
-  blobHTTPHeaders: {
-    blobContentType: fileType || "image/png",
-    blobCacheControl: "no-store, no-cache, must-revalidate, max-age=0",
-  },
-});
-
+  await blockBlob.uploadData(bytes, {
+    blobHTTPHeaders: {
+      blobContentType: "image/png",
+      blobCacheControl: "no-store, no-cache, must-revalidate, max-age=0",
+    },
+  });
 
   context.res = json(200, { ok: true, matchId, blobPath });
 };
