@@ -5,6 +5,7 @@ const corsHeaders = {
   "access-control-allow-origin": "*",
   "access-control-allow-headers": "content-type, x-score-token",
   "access-control-allow-methods": "POST, OPTIONS",
+  "access-control-max-age": "86400",
 };
 
 const json = (status, body) => ({
@@ -48,7 +49,10 @@ const verifyJwtHs256 = (token, secret) => {
   return { ok: true, payload };
 };
 
-const safe = (s, max) => String(s || "").replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, max);
+const safe = (s, max) =>
+  String(s || "")
+    .replace(/[^a-zA-Z0-9_-]+/g, "_")
+    .slice(0, max);
 
 module.exports = async function (context, req) {
   if (req.method === "OPTIONS") {
@@ -59,7 +63,10 @@ module.exports = async function (context, req) {
   const tokenSecret = process.env.TOKEN_SECRET || "";
   const conn = process.env.AZURE_STORAGE_CONNECTION_STRING || "";
   if (!tokenSecret || !conn) {
-    context.res = json(500, { ok: false, error: "missing env TOKEN_SECRET/AZURE_STORAGE_CONNECTION_STRING" });
+    context.res = json(500, {
+      ok: false,
+      error: "missing env TOKEN_SECRET/AZURE_STORAGE_CONNECTION_STRING",
+    });
     return;
   }
 
