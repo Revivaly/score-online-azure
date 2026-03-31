@@ -91,6 +91,10 @@ module.exports = async function (context, req) {
 
   const raw = req.rawBody || req.body;
   const buf = Buffer.isBuffer(raw) ? raw : Buffer.from(raw || "");
+  let raw = req.body;
+  if (!Buffer.isBuffer(raw) && req.rawBody) raw = req.rawBody;
+  const buf = Buffer.isBuffer(raw) ? raw : Buffer.from(String(raw || ""), "binary");
+
   const stream = Readable.from(buf);
 
   let matchId = "";
