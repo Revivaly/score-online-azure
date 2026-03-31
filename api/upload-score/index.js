@@ -5,14 +5,14 @@ const { BlobServiceClient } = require("@azure/storage-blob");
 
 const corsHeaders = {
   "access-control-allow-origin": "*",
-  "access-control-allow-headers": "authorization, content-type",
-  "access-control-allow-methods": "POST, OPTIONS"
+  "access-control-allow-headers": "content-type, x-score-token",
+  "access-control-allow-methods": "POST, OPTIONS",
 };
 
 const json = (status, body) => ({
   status,
   headers: { ...corsHeaders, "content-type": "application/json; charset=utf-8" },
-  body: JSON.stringify(body)
+  body: JSON.stringify(body),
 });
 
 const b64uToBuf = (s) => {
@@ -61,18 +61,23 @@ module.exports = async function (context, req) {
   const tokenSecret = process.env.TOKEN_SECRET || "";
   const conn = process.env.AZURE_STORAGE_CONNECTION_STRING || "";
   if (!tokenSecret || !conn) {
-    context.res = json(500, { ok: false, error: "missing env TOKEN_SECRET/AZURE_STORAGE_CONNECTION_STRING" });
+    context.res = json(500, {
+      ok: false,
+      error: "missing env TOKEN_SECRET/AZURE_STORAGE_CONNECTION_STRING",
+    });
     return;
   }
 
-  const auth = req.headers?.authorization || req.headers?.Authorization || "";
-  const m = String(auth).match(/^Bearer\s+(.+)$/i);
-  if (!m) {
-    context.res = json(401, { ok: false, error: "missing bearer token" });
+  // NOTE: Do NOT use Authorization header (SWA may inject its own).
+  const token =
+    (req.headers && (req.headers["x-score-token"] || req.headers["X-Score-Token"])) || "";
+
+  if (!token) {
+    context.res = json(401, { ok: false, error: "missing x-score-token" });
     return;
   }
 
-  const vr = verifyJwtHs256(m[1], tokenSecret);
+  const vr = verifyJwtHs256(String(token), tokenSecret);
   if (!vr.ok) {
     context.res = json(401, { ok: false, error: vr.error });
     return;
@@ -136,7 +141,7 @@ module.exports = async function (context, req) {
   const blockBlob = container.getBlockBlobClient(blobPath);
 
   await blockBlob.uploadData(fileBuf, {
-    blobHTTPHeaders: { blobContentType: fileType || "image/png" }
+    blobHTTPHeaders: { blobContentType: fileType || "image/png" },
   });
 
   context.res = json(200, { ok: true, matchId, blobPath });
