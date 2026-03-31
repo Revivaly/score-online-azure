@@ -1,13 +1,14 @@
 {
   "bindings": [
     {
-      "authLevel": "anonymous",
-      "type": "httpTrigger",
-      "direction": "in",
-      "name": "req",
-      "methods": ["post", "options"],
-      "route": "upload-score"
-    },
+  "authLevel": "anonymous",
+  "type": "httpTrigger",
+  "direction": "in",
+  "name": "req",
+  "methods": ["post", "options"],
+  "route": "upload-score",
+  "dataType": "binary"
+},
     {
       "type": "http",
       "direction": "out",
